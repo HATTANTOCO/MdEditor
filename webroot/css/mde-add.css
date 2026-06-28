@@ -1,0 +1,324 @@
+@charset "utf-8";
+/**
+ * MdEditor フロントエンド表示用スタイルシート
+ *
+ * - EasyMDE/Parsedown出力エリアにおける各種要素の表示崩れ防止とカプセル化
+ * - 既存のグローバルCSS（editor.css等）からの高詳細度スタイル干渉の完全遮断
+ * - コードブロックにおける多軸固定スクロール制御（X軸吸着 sticky 構造）
+ *
+ * @package    MdEditor
+ * @subpackage webroot.css
+ * @author     HATTA
+ * @license    MIT License
+ * @link       https://hattantoco.com
+ */
+
+/* editor.css のリセット */
+
+/* 1. 文章全体の初期化（デトックスステージ） */
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body p,
+body * .mde-parsed-body p,
+body .mde-parsed-body p,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h1, body * .mde-parsed-body h1, body .mde-parsed-body h1,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h2, body * .mde-parsed-body h2, body .mde-parsed-body h2,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h3, body * .mde-parsed-body h3, body .mde-parsed-body h3,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h4, body * .mde-parsed-body h4, body .mde-parsed-body h4,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul, body * .mde-parsed-body ul, body .mde-parsed-body ul,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol, body * .mde-parsed-body ol, body .mde-parsed-body ol,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body li, body * .mde-parsed-body li, body .mde-parsed-body li {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* 2. Markdownに適切な設定に上書き */
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body p,
+body * .mde-parsed-body p,
+body .mde-parsed-body p {
+    margin-bottom: 1.4em !important; /* 20pxを上書き */
+    line-height: 1.8 !important;     /* line-height: 2 を上書き */
+    font-size: 16px !important;
+    color: #333333 !important;
+    letter-spacing: normal !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h1, body * .mde-parsed-body h1, body .mde-parsed-body h1,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h2, body * .mde-parsed-body h2, body .mde-parsed-body h2,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h3, body * .mde-parsed-body h3, body .mde-parsed-body h3 {
+    font-weight: bold !important;
+    color: #222222 !important;
+    line-height: 1.4 !important;
+    margin-top: 1.8em !important;   
+    margin-bottom: 0.6em !important; 
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h1, body * .mde-parsed-body h1, body .mde-parsed-body h1 { font-size: 2.2em !important; border-bottom: 1px solid #eaecef !important; padding-bottom: 0.3em !important; }
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h2, body * .mde-parsed-body h2, body .mde-parsed-body h2 { font-size: 1.6em !important; border-bottom: 1px solid #eaecef !important; padding-bottom: 0.3em !important; }
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body h3, body * .mde-parsed-body h3, body .mde-parsed-body h3 { font-size: 1.3em !important; }
+
+
+/* 3. 箇条書き（リスト）のマーカーと余白の強制正常化 */
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul, 
+body * .mde-parsed-body ul, 
+body .mde-parsed-body ul { 
+    list-style-type: disc !important; 
+    margin: 1em 0 1.4em 0 !important; 
+    padding-left: 2.0em !important; 
+    display: block !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol, 
+body * .mde-parsed-body ol, 
+body .mde-parsed-body ol { 
+    list-style-type: decimal !important; 
+    margin: 1em 0 1.4em 0 !important; 
+    padding-left: 2.0em !important; 
+    display: block !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul > li, 
+body * .mde-parsed-body ul > li, 
+body .mde-parsed-body ul > li {
+    display: list-item !important;
+    list-style-type: disc !important;        
+    list-style-position: outside !important;   
+    overflow: visible !important;            
+    padding-left: 0 !important;              
+    margin: 0.4em 0 !important;
+    line-height: inherit !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol > li, 
+body * .mde-parsed-body ol > li, 
+body .mde-parsed-body ol > li {
+    display: list-item !important;
+    list-style-type: decimal !important;     /* 🍏 01, 02 ではなく通常の 1, 2, 3 を強制点灯！ */
+    list-style-position: outside !important;   
+    overflow: visible !important;            
+    padding-left: 0 !important;              
+    margin: 0.4em 0 !important;
+    line-height: inherit !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul ul,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol ol,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol ul,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul ol,
+body * .mde-parsed-body ul ul, body * .mde-parsed-body ol ol,
+body * .mde-parsed-body ol ul, body * .mde-parsed-body ul ol {
+    margin: 0.2em 0 0.2em 1.5em !important; 
+    padding-left: 0 !important;
+}
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul li::before,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol li::before,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ul > li::before,
+:root body .mde-parsed-body.mde-parsed-body.mde-parsed-body ol > li::before,
+body * .mde-parsed-body ul li::before,
+body * .mde-parsed-body ol li::before,
+body * .mde-parsed-body ul > li::before,
+body * .mde-parsed-body ol > li::before {
+    content: none !important;           
+    display: inline !important;         
+    position: absolute !important;      
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important; 
+}
+
+/* 4. editor.css（CKEditor）のバグ修正 */
+main strong {
+    font-weight: bold !important;
+}
+
+/* 汎用的なオーバーフロー対策 */
+img {
+    max-width: 100%;
+}
+
+
+/* MdEditor用の初期設定 */
+
+/* 1. 全体の外枠（デフォルトはライトモード） */
+.mde-code-wrapper {
+    position: relative !important;
+    margin: 1.5em 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    font-size: .875em;
+    border: 1px solid #E2E2E2;
+    border-radius: 5px !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background-color: #fafafa !important;
+    background: #fafafa !important;
+    color: #333333 !important;
+}
+
+/* 2. pre（内枠） */
+.mde-code-wrapper pre.mde-pre {
+    position: relative !important;
+    font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+    margin: 33px 0 0 0 !important;
+    padding: 12px 0 !important; 
+    box-sizing: border-box !important;
+    max-height: 600px !important; 
+    overflow-x: auto !important; 
+    overflow-y: auto !important; 
+    display: block !important;
+    border: none !important;
+    color: inherit !important;
+    background: inherit !important;
+    background-color: inherit !important;
+}
+
+/* codeタグ全体の基準と折り返しルール */
+pre.mde-pre code {
+    font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+    padding: 0 5px !important;
+    margin: 0 !important;
+    border: none !important;
+    white-space: pre !important; 
+    word-break: normal !important;
+    word-wrap: normal !important;
+}
+
+/* 3. 行番号のラッパー */
+.mde-code-wrapper pre.mde-pre .ln-wrapper {
+    position: sticky !important;
+    left: 0 !important;
+    top: 0 !important;
+    display: inline-block !important;
+    vertical-align: top !important;
+    width: 3.5em !important;
+    text-align: right !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: 1.6 !important;
+    padding-right: 0.8em !important;
+    user-select: none !important;
+    box-sizing: border-box !important;
+    border-right: 1px solid color-mix(in srgb, currentColor 30%, transparent) !important;
+    z-index: 20 !important;
+    background: inherit !important;
+    background-color: inherit !important;
+    color: color-mix(in srgb, currentColor 55%, var(--mde-preview-bg, transparent)) !important;
+}
+
+/* 行番号を縦並びに強制スタック */
+pre.mde-pre .ln-num {
+    display: block !important;
+    line-height: inherit !important;
+    height: auto !important;
+}
+
+/* 4. コード本体（highlight.js の標準構造）ルール */
+.mde-code-wrapper pre.mde-pre code.hljs {
+    display: inline-block !important;
+    vertical-align: top !important;
+    width: max-content !important;
+    min-width: calc(100% - 3.5em) !important;
+    padding: 0 1.5em 0 1em !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+    white-space: pre !important; 
+    word-break: normal !important;
+    word-wrap: normal !important;
+    z-index: 1 !important;
+    background: inherit !important;
+    background-color: inherit !important;
+}
+
+/* 言語名・ファイル名ヘッダー枠 */
+.mde-code-wrapper .mde-code-header {
+    background: inherit !important;
+    background-color: inherit !important;
+    color: color-mix(in srgb, currentColor 65%, var(--mde-preview-bg, transparent)) !important;
+    display: block;
+    padding: 6px 12px;
+    width: 100%;
+    box-sizing: border-box !important;
+    border-radius: 5px 5px 0 0 !important; 
+    font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace !important;
+    font-weight: normal !important;
+    font-size: 14px !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    z-index: 21 !important;
+}
+
+/* コピーボタン */
+.mde-code-wrapper .mde-copy-btn {
+    background: inherit !important;
+    background-color: inherit !important;
+    color: currentColor !important;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent) !important;
+    position: absolute !important;
+    top: 4px !important;
+    right: 5px !important;
+    z-index: 40 !important; 
+    padding: 9px !important;
+    font-size: 12px !important;
+    cursor: pointer !important;
+    opacity: 0 !important;
+    transition: opacity 0.2s ease, background-color 0.2s ease, color 0.2s ease !important;
+    display: inline-block !important;
+    border-radius: 3px !important;
+    line-height: 1 !important;
+}
+.mde-code-wrapper:hover .mde-copy-btn { opacity: 0.6 !important; }
+.mde-code-wrapper .mde-copy-btn:hover { opacity: 1 !important; filter: brightness(1.2) !important; }
+.mde-code-wrapper .mde-copy-btn.copied { background-color: #dafbe1 !important; color: #1a7f37 !important; border-color: #8cd19d !important; opacity: 1 !important; }
+
+/* infoボックス */
+.mde-info-box {
+    background-color: #dff4cf;
+    align-items: center;
+    border-radius: 8px;
+    display: flex;
+    padding: 1em;
+    margin: 1em 0;
+    white-space: pre-wrap;
+}
+.mde-info-box::before {
+    content: "\f058" !important;
+    font-family: "Font Awesome 5 Free", "Font Awesome 6 Free", "FontAwesome" !important;
+    font-weight: 900 !important;
+    font-size: 1.25em !important;
+    color: #357a00 !important;
+    padding-right: 0.25em;
+}
+.mde-info-box p {
+    margin: 0 !important;
+}
+.mde-info-box p:last-child {
+    margin-bottom: 0 !important;
+}
+
+
+/* 
+ * 以降、ユーザー専用カスタマイズ領域
+ * ここにカスタムテーマを追記：
+ * GitHub風、Monokai風などのテーマCSS（.hljs や pre への色指定）を
+ * この下に貼り付けてください。
+ * 
+ * 重要：ダークテーマ（黒系）を貼り付ける際の一言マニュアル】
+ * ネットから持ってきたテーマ（GitHub Darkなど）を貼り付ける場合のみ、
+ * 以下の1ブロックのコメントアウトを解除してください。
+ * 外枠、行番号、ヘッダーのすべてが一瞬で完全な不透明の漆黒へと自動同期します。
+ **/
+
+
+/*
+.mde-code-wrapper {
+    background-color: #0d1117 !important; 
+    background: #0d1117 !important;
+    color: #c9d1d9 !important;            
+}
+*/
+
+
+/* == ［ここに外部のHighlight.jsテーマCSSをそのまま貼り付けてください］ == */
+
+
+/* == ［Markdown文章要素の独自変更は、ここに記述してください】 == */
