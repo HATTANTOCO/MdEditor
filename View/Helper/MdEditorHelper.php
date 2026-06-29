@@ -68,8 +68,9 @@ class MdEditorHelper extends AppHelper {
             $this->BcBaser->scriptBlock($this->_buildMdeScript('PageContents'), array('inline' => false));
             
             if (isset($this->_View->Blocks)) {
-                $rawContent = $this->_View->Blocks->get('content');
-                if (!empty($rawContent)) {
+                // PHP 8.0対応：引数へのnull侵入による型エラー（TypeError）を防止するため、文字列型（string）へ強制キャスト
+                $rawContent = (string)$this->_View->Blocks->get('content');
+                if ($rawContent !== '') {
                     $search  = array('[#PHP_START_LONG#]', '[#PHP_START_SHORT#]', '[#PHP_END#]');
                     $replace = array('<?php', '<?', '?>');
                     $restoredContent = str_replace($search, $replace, $rawContent);
@@ -88,8 +89,9 @@ class MdEditorHelper extends AppHelper {
 
             // A. 固定ページ本文の強制パース
             if ($this->request->params['controller'] === 'pages' && isset($this->_View->Blocks)) {
-                $rawMarkdown = $this->_View->Blocks->get('content');
-                if (!empty($rawMarkdown) && is_string($rawMarkdown)) {
+                // PHP 8.0対応：引数へのnull侵入による型エラー（TypeError）を防止するため、文字列型（string）へ強制キャスト
+                $rawMarkdown = (string)$this->_View->Blocks->get('content');
+                if ($rawMarkdown !== '') {
                     $search  = array('[#PHP_START_LONG#]', '[#PHP_START_SHORT#]', '[#PHP_END#]');
                     $replace = array('<?php', '<?', '?>');
                     $restoredMarkdown = str_replace($search, $replace, $rawMarkdown);
@@ -111,9 +113,10 @@ class MdEditorHelper extends AppHelper {
                 }
 
                 if ($isSinglePage) {
-                    $finalHtml = $this->_View->Blocks->get('content');
+                    // PHP 8.0対応：strpos/substr等の引数へのnull侵入による型エラー（TypeError）を防止するため、文字列型（string）へ強制キャスト
+                    $finalHtml = (string)$this->_View->Blocks->get('content');
                     
-                    if (!empty($finalHtml) && is_string($finalHtml)) {
+                    if ($finalHtml !== '') {
                         $startMarker = '<!--MDE_BODY_START-->';
                         $endMarker   = '<!--MDE_BODY_END-->';
 
