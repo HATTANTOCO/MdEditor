@@ -58,7 +58,7 @@ app/Plugin/MdEditor/
 ## インストール要件
 
 * CMS本体: baserCMS 4.7.x以上（admin-second / admin-third テーマ対応）
-* 動作環境: PHP 8.x以上
+* 動作環境: PHP 7.x以上
 
 ## インストール方法
 
