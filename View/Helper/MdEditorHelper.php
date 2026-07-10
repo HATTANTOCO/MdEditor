@@ -96,7 +96,7 @@ class MdEditorHelper extends AppHelper {
                     $replace = array('<?php', '<?', '?>');
                     $restoredMarkdown = str_replace($search, $replace, $rawMarkdown);
 
-                    $cleanMarkdown = str_replace(array('<br />', '<br>'), "\n", $restoredMarkdown);
+                    $cleanMarkdown = $restoredMarkdown;
                     $parsedHtml = $this->_toHtml($cleanMarkdown, true);
                     
                     $wrappedPageHtml = '<div class="mde-parsed-body">' . $parsedHtml . '</div>';
@@ -132,18 +132,21 @@ class MdEditorHelper extends AppHelper {
                             $search  = array('[#PHP_START_LONG#]', '[#PHP_START_SHORT#]', '[#PHP_END#]');
                             $replace = array('<?php', '<?', '?>');
                             $restoredMarkdown = str_replace($search, $replace, $rawMarkdown);
-                            $cleanMarkdown = str_replace(array('<br />', '<br>'), "\n", $restoredMarkdown);
+                            $cleanMarkdown = $restoredMarkdown;
 
                             $isolatedMarkdown = "\n\n" . trim($cleanMarkdown) . "\n\n";
                             $parsedBodyHtml = $this->_toHtml($isolatedMarkdown, true);
 
+                            // パース直後のHTMLを、画面へ再結合する直前で安全にクリーニング
+                            $safeBodyHtml = $this->_sanitizeHtml($parsedBodyHtml);
+
                             // 元の画面全体のHTMLの「本文（Markdown）があった場所」だけを、専用の防衛コンテナで包んで置換
                             $beforeBody = substr($finalHtml, 0, $startPos);
                             $afterBody  = substr($finalHtml, $endPos + strlen($endMarker));
-                            
-                            // パース後のHTMLを「class="mde-parsed-body"」を持ったdivで完全にカプセル化（隔離）
-                            $wrappedBodyHtml = '<div class="mde-parsed-body">' . $parsedBodyHtml . '</div>';
-                            
+
+                            // パース・サニタイズ済みの安全なHTMLを防衛コンテナ（div）でカプセル化
+                            $wrappedBodyHtml = '<div class="mde-parsed-body">' . $safeBodyHtml . '</div>';
+
                             // 綺麗に組み替えたHTMLをバッファへ上書き復元
                             $this->_View->Blocks->set('content', $beforeBody . $wrappedBodyHtml . $afterBody);
                         }
@@ -243,11 +246,10 @@ class MdEditorHelper extends AppHelper {
 
     /**
      * Vendor/CustomParsedown を用いた Markdown HTML 変換の内部実行
-     * - 改行の自動変換（setBreaksEnabled）およびHTMLタグのエスケープ制御（setSafeMode）の定義
      *
-     * @param  string  $text Markdown文字列
-     * @param  boolean $forcePage 強制変換フラグ
-     * @return string
+     * @param  string  $text   アンカー等の隔離マークを含んだMarkdown文字列
+     * @param  boolean $forcePage 強制パース執行フラグ
+     * @return string  パース完了後のHTML文字列
      */
     protected function _toHtml($text, $forcePage = false) {
         if (empty($text) || !is_string($text)) { return $text; }
@@ -263,5 +265,56 @@ class MdEditorHelper extends AppHelper {
         $parsedown->setBreaksEnabled(true);
         $parsedown->setSafeMode(false);
         return $parsedown->text($text);
+    }
+
+    /**
+     * （DOMDocument安全隔離型）HTMLサニタイザー
+     */
+    protected function _sanitizeHtml($html) {
+        if ($html === '') return '';
+
+        // アンカーや生PHPタグを消去から守るための一次退避（シールド）
+        $shieldSearch  = array('<!--MDE_BODY_START-->', '<!--MDE_BODY_END-->', '<?php', '<? ', '?>');
+        $shieldReplace = array('[#MDE_SHIELD_START#]', '[#MDE_SHIELD_END#]', '[#PHP_DOM_LONG#]', '[#PHP_DOM_SHORT#]', '[#PHP_DOM_END#]');
+        $shieldedHtml = str_replace($shieldSearch, $shieldReplace, $html);
+
+        // 許可する安全なHTMLタグのホワイトリスト
+        $allowedTags = '<div><span><p><br><hr><h1><h2><h3><h4><h5><h6><a><img><strong><em><b><i><ul><ol><li><pre><code><blockquote><table><thead><tbody><tr><th><td><iframe>';
+        $cleaned = strip_tags($shieldedHtml, $allowedTags);
+
+        // DOMで危険な属性（onclick, javascript:等）を除去
+        $dom = new DOMDocument();
+        $htmlWithMeta = '<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>' . $cleaned . '</body></html>';
+        @$dom->loadHTML($htmlWithMeta, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+        $xpath = new DOMXPath($dom);
+        $nodes = $xpath->query('//*');
+
+        foreach ($nodes as $node) {
+            if (!$node->hasAttributes()) { continue; }
+            $attributes = array();
+            foreach ($node->attributes as $attr) { $attributes[] = $attr->name; }
+            foreach ($attributes as $attrName) {
+                if (strpos(strtolower($attrName), 'on') === 0) {
+                    $node->removeAttribute($attrName);
+                    continue;
+                }
+                if (in_array(strtolower($attrName), array('href', 'src'))) {
+                    $attrValue = trim($node->getAttribute($attrName));
+                    if (preg_match('/^(javascript|data|vbscript):/i', $attrValue)) {
+                        $node->removeAttribute($attrName);
+                    }
+                }
+            }
+        }
+
+        $bodyNode = $dom->getElementsByTagName('body')->item(0);
+        $result = '';
+        if ($bodyNode) {
+            foreach ($bodyNode->childNodes as $child) { $result .= $dom->saveHTML($child); }
+        }
+
+        // アンカーとPHPタグを復元
+        return str_replace($shieldReplace, $shieldSearch, $result);
     }
 }
