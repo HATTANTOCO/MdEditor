@@ -63,7 +63,7 @@ class MdEditorHelper extends AppHelper {
         // --- 1. 管理画面（admin）：エディタ表示時のPHPタグ復元 ---
         if (isset($this->request->params['admin']) && $this->request->params['admin']) {
             $this->BcBaser->css('MdEditor.easymde.min', array('inline' => false));
-            $this->BcBaser->css('/md_editor/css/mde-preview.css', array('inline' => false));
+            $this->BcBaser->css('MdEditor.mde-preview', array('inline' => false));
             $this->BcBaser->js('MdEditor.easymde.min', false, array('inline' => false));
             $this->BcBaser->scriptBlock($this->_buildMdeScript('PageContents'), array('inline' => false));
             
@@ -82,10 +82,10 @@ class MdEditorHelper extends AppHelper {
         
         // --- 2. フロント公開画面（非admin）：カプセル化パース処理 ---
         if (empty($this->request->params['admin'])) {
-            $this->BcBaser->css('/md_editor/css/atom-one-light.min.css', array('inline' => false));
-            $this->BcBaser->css('/md_editor/css/mde-add.css', array('inline' => false));
-            $this->BcBaser->js('/md_editor/js/highlight.min.js', false, array('defer' => 'defer', 'inline' => false));
-            $this->BcBaser->js('/md_editor/js/mde-core.js', false, array('defer' => 'defer', 'inline' => false));
+            $this->BcBaser->css('MdEditor.atom-one-light.min', array('inline' => false));
+            $this->BcBaser->css('MdEditor.mde-add', array('inline' => false));
+            $this->BcBaser->js('MdEditor.highlight.min', false, array('defer' => 'defer', 'inline' => false));
+            $this->BcBaser->js('MdEditor.mde-core', false, array('defer' => 'defer', 'inline' => false));
 
             // A. 固定ページ本文の強制パース
             if ($this->request->params['controller'] === 'pages' && isset($this->_View->Blocks)) {
@@ -144,7 +144,7 @@ class MdEditorHelper extends AppHelper {
                             $beforeBody = substr($finalHtml, 0, $startPos);
                             $afterBody  = substr($finalHtml, $endPos + strlen($endMarker));
 
-                            // パース・サニタイズ済みの安全なHTMLを防衛コンテナ（div）でカプセル化
+                            // $parsedBodyHtml の代わりに、安全になった $safeBodyHtml を包みます
                             $wrappedBodyHtml = '<div class="mde-parsed-body">' . $safeBodyHtml . '</div>';
 
                             // 綺麗に組み替えたHTMLをバッファへ上書き復元
