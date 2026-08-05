@@ -105,8 +105,8 @@ class MdEditorControllerEventListener extends BcControllerEventListener {
     }
 
     /**
-     * コントローラー処理終了・レスポンス生成タイミング
-     * 最終出力HTMLに対して、安全なアラート割り込み ＆ トークン引き継ぎ用JavaScriptを強制注入
+     * コントローラー処理終了・レスポンス生成タイミング（shutdown）
+     * 最終出力HTMLに対して、安全なアラート割り込み ＆ 最優先順序シャッフルJavaScriptを動的に一括流し込み
      *
      * @param  CakeEvent $event
      * @return void
@@ -120,68 +120,49 @@ class MdEditorControllerEventListener extends BcControllerEventListener {
 
             $currentUrl = $controller->request->here;
 
-            // 割り込み用のJavaScript（コアセキュリティを継承）
-            $interceptJs = "
-<script type=\"text/javascript\">
-$(function() {
-    // MdEditorの無効ボタンのHTML（aタグ）をhrefから特定
-    var \$deleteBtn = $('a.btn-delete[href*=\"/plugins/ajax_delete/MdEditor\"], a.btn-delete[href*=\"/plugins/ajax_delete/MDEditor\"]');
+            // 1行ずつの結合スタイルへ完全統一し、PHPのネストと出力時のインデントの美しさを完全両立
+            $interceptJs = "";
+            $interceptJs .= "\n<script type=\"text/javascript\">\n";
+            $interceptJs .= "$(function() {\n";
+            $interceptJs .= "    // 1. MdEditorの無効ボタンを正確に狙い撃ち（他人に1ミリも干渉しない単一セレクタ）\n";
+            $interceptJs .= "    var \$deleteBtn = \$('a.btn-delete[href*=\"/plugins/ajax_delete/MdEditor\"], a.btn-delete[href*=\"/plugins/ajax_delete/MDEditor\"]');\n";
+            $interceptJs .= "\n";
+            $interceptJs .= "    if (\$deleteBtn.length > 0) {\n";
+            $interceptJs .= "        // 2. 自分のボタンのクリックイベントに対して、先行お掃除処理を登録\n";
+            $interceptJs .= "        \$deleteBtn.on('click', function(e) {\n";
+            $interceptJs .= "            var currentElement = this;\n";
+            $interceptJs .= "            var isConfirm = confirm(\n";
+            $interceptJs .= "                \"– MdEditorからの確認 –\\n\\n\" +\n";
+            $interceptJs .= "                \"現在、基本設定＞エディタ設定で「Markdownエディタ」が選択されている可能性があります。\\n\\n\" +\n";
+            $interceptJs .= "                \"安全のためエディタ設定を標準の「CKEditor」に戻した上で、本プラグインの「無効化」を実行します。\\n\\n\" +\n";
+            $interceptJs .= "                \"処理を続行しますか？\"\n";
+            $interceptJs .= "            );\n";
+            $interceptJs .= "            \n";
+            $interceptJs .= "            if (isConfirm) {\n";
+            $interceptJs .= "                // 同期（Ajax）でPHP側の低レイヤーSQLリセット処理を最優先実行\n";
+            $interceptJs .= "                \$.ajax({\n";
+            $interceptJs .= "                    url: '{$currentUrl}',\n";
+            $interceptJs .= "                    type: 'GET',\n";
+            $interceptJs .= "                    data: { 'action': 'mdeditor_force_reset' },\n";
+            $interceptJs .= "                    async: false,\n";
+            $interceptJs .= "                    dataType: 'json'\n";
+            $interceptJs .= "                });\n";
+            $interceptJs .= "                // 正常完了したら、そのままバトンを後ろのイベント（コアのアラート）へ流します\n";
+            $interceptJs .= "            } else {\n";
+            $interceptJs .= "                // キャンセルされた場合は、後ろに控えているコアシステムへの通信をその場で遮断\n";
+            $interceptJs .= "                e.preventDefault(); e.stopImmediatePropagation();\n";
+            $interceptJs .= "                return false;\n";
+            $interceptJs .= "            }\n";
+            $interceptJs .= "        });\n";
+            $interceptJs .= "        \n";
+            $interceptJs .= "        // 3. 最優先順序シャッフルの復元\n";
+            $interceptJs .= "        var _events = \$._data(\$deleteBtn.get(0), 'events');\n";
+            $interceptJs .= "        if (_events && _events.click) { _events.click.unshift(_events.click.pop()); }\n";
+            $interceptJs .= "    }\n";
+            $interceptJs .= "});\n";
+            $interceptJs .= "</script>\n";
 
-    if (\$deleteBtn.length > 0) {
-        
-        // 無効ボタンに対するコア側のイベント（トークン付きAjax）を一時的に安全な変数へ退避
-        var originalEvents = $._data(\$deleteBtn.get(0), 'events');
-        var originalClickHandlers = [];
-        
-        if (originalEvents && originalEvents.click) {
-            $.each(originalEvents.click, function(index, handlerObj) {
-                originalClickHandlers.push(handlerObj.handler);
-            });
-            // コア側のクリックイベントを一旦安全に解除
-            \$deleteBtn.off('click');
-        }
-
-        // 無効ボタンに独自イベントをバインド
-        \$deleteBtn.on('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // プラグイン専用の確認ダイアログを表示
-            var result = window.confirm(
-                \"– MdEditorプラグインからのお知らせ –\\n\\n\" +
-                \"現在、基本設定＞エディタ設定で「Markdownエディタ」が選択されている可能性があります。\\n\\n\" +
-                \"安全のためエディタ設定を標準の「CKEditor」に戻した上で、本プラグインの「無効化」を実行します。\\n\\n\" +
-                \"処理を続行しますか？\"
-            );
-            
-            if (result) {
-                // 同期（Ajax）でPHP側の低レイヤーSQLリセット処理を最優先実行
-                $.ajax({
-                    url: '{$currentUrl}',
-                    type: 'GET',
-                    data: { 'action': 'mdeditor_force_reset' },
-                    async: false,
-                    dataType: 'json'
-                });
-
-                // 退避させていたコア側のAjax削除イベント（セキュリティトークン付き）を実行
-                var currentElement = this;
-                var currentEvent = e;
-                if (originalClickHandlers.length > 0) {
-                    $.each(originalClickHandlers, function(index, handler) {
-                        handler.call(currentElement, currentEvent);
-                    });
-                }
-            }
-            
-            return false;
-        });
-    }
-});
-</script>
-";
-
-            // HTMLの </body> タグの直前に強制ねじ込み
+            // HTMLの </body> タグの直前に強制挿入
             if (strpos($html, '</body>') !== false) {
                 $html = str_replace('</body>', $interceptJs . '</body>', $html);
             } else {
@@ -191,7 +172,7 @@ $(function() {
             $controller->response->body($html);
         }
     }
-
+    
     /**
      * ビュー描画直前タイミング（beforeRender）でのデータ復元処理
      *
