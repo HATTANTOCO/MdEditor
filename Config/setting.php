@@ -51,12 +51,19 @@ $config['MdEditor']['toolbar'] = array(
     "|",
     
     // カスタムアクションボタン：補足情報ボックス（info-box）の挿入
-    // - ツールバーにFontAwesomeのアイコンを追加し、指定の独自Markdown構文をエディタに挿入
     array(
         'name' => 'info-box',
         'className' => 'fa fa-info-circle',
         'title' => '補足情報（info）の枠を挿入',
         'defaultText' => ":::info\nここに補足情報を記入\n:::\n"
+    ),
+    
+    // カスタムアクションボタン：MdEditorパース除外エリア（raw-code）の挿入
+    array(
+        'name' => 'raw-code',
+        'className' => 'fa fa-file-code-o',
+        'title' => 'MdEditorパース除外エリア（raw-code）を挿入',
+        'defaultText' => ":::raw-code\n<!-- ここは、MdEditor専用CSSに干渉されず、コードもそのまま反映されます。 -->\n:::\n"
     ),
     "|",
     
@@ -66,3 +73,4 @@ $config['MdEditor']['toolbar'] = array(
     "|",
     "guide"
 );
+

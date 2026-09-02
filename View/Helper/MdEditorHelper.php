@@ -87,19 +87,74 @@ class MdEditorHelper extends AppHelper {
             $this->BcBaser->js('MdEditor.highlight.min', false, array('defer' => 'defer', 'inline' => false));
             $this->BcBaser->js('MdEditor.mde-core', false, array('defer' => 'defer', 'inline' => false));
 
-            // A. 固定ページ本文の強制パース
+            // A. 固定ページ本文のパース処理（raw-code スライス・PHP/JS動的実行仕様）
             if ($this->request->params['controller'] === 'pages' && isset($this->_View->Blocks)) {
-                // PHP 8.0対応：引数へのnull侵入による型エラー（TypeError）を防止するため、文字列型（string）へ強制キャスト
+                // PHP 8.0対応：引数へのnull侵入による型エラーを防止するため文字列型へ強制キャスト
                 $rawMarkdown = (string)$this->_View->Blocks->get('content');
                 if ($rawMarkdown !== '') {
                     $search  = array('[#PHP_START_LONG#]', '[#PHP_START_SHORT#]', '[#PHP_END#]');
                     $replace = array('<?php', '<?', '?>');
                     $restoredMarkdown = str_replace($search, $replace, $rawMarkdown);
-
                     $cleanMarkdown = $restoredMarkdown;
-                    $parsedHtml = $this->_toHtml($cleanMarkdown, true);
-                    
-                    $wrappedPageHtml = '<div class="mde-parsed-body">' . $parsedHtml . '</div>';
+
+                    // raw-code 構文（プレ・パーススライス処理）
+                    // Parsedownやエディタ専用CSSの干渉外へ隔離する
+                    if (strpos($cleanMarkdown, ':::raw-code') !== false) {
+                        
+                        $parts = preg_split('/:::\s*raw\-code\s*(.*?)\s*:::/is', $cleanMarkdown, -1, PREG_SPLIT_DELIM_CAPTURE);
+                        
+                        $finalHtmlResult = '';
+                        foreach ($parts as $index => $content) {
+                            if ($content === '') continue;
+
+                            if ($index % 2 !== 0) {
+                                // raw-code領域
+                                // Parsedownの通過を完全にバイパスさせ、ラッパー要素（div等）を付与せず生のまま結合する
+                                $finalHtmlResult .= $content;
+                            } else {
+                                // Markdown領域
+                                // 事前に生HTMLブロックが排除されているためパニックを起こさず、見出し等のMarkdown記法を正常にパースする
+                                $parsedPart = $this->_toHtml($content, true);
+                                if ($parsedPart !== '') {
+                                    $finalHtmlResult .= '<div class="mde-parsed-body mde-hybrid-mode">' . $parsedPart . '</div>';
+                                }
+                            }
+                        }
+                        
+                        $wrappedPageHtml = $finalHtmlResult;
+                    } else {
+                        // 通常パースモード：独自の除外マークアップが含まれない場合は、全体を単一コンテナで内包
+                        $parsedHtml = $this->_toHtml($cleanMarkdown, true);
+                        $wrappedPageHtml = '<div class="mde-parsed-body">' . $parsedHtml . '</div>';
+                    }
+
+                    // インラインPHPコードの動的評価・実行処理（サンドボックス擬似実行）
+                    // 本文、スライスエリア、マージされたコードエリアのいずれかにPHPタグまたはその残骸を検知した場合にevalを起動
+                    $hasPhpCode = (strpos($wrappedPageHtml, '<?php') !== false || 
+                                   strpos($wrappedPageHtml, '<?') !== false || 
+                                   strpos($cleanMarkdown, '<?php') !== false ||
+                                   strpos($rawMarkdown, '[#PHP_START_LONG#]') !== false);
+
+                    if ($hasPhpCode) {
+                        $renderPhpInline = function($htmlStr) {
+                            ob_start();
+                            try {
+                                eval('?>' . $htmlStr);
+                                return ob_get_clean();
+                            } catch (Exception $e) {
+                                ob_end_clean();
+                                return $htmlStr . '<p style="color:red; background:#fee; padding:10px;">PHP実行エラー: ' . h($e->getMessage()) . '</p>';
+                            }
+                        };
+
+                        // 実行コンテキストのバインディング
+                        // クロージャ内部の「$this」を現在のViewクラス（$this->_View）へ明示的に結合し、コア関数の正常な実行を可能にする
+                        $boundClosure = $renderPhpInline->bindTo($this->_View, $this->_View);
+                        if ($boundClosure) {
+                            $wrappedPageHtml = $boundClosure($wrappedPageHtml);
+                        }
+                    }
+                                       
                     $this->_View->Blocks->set('content', $wrappedPageHtml);
                 }
             }
@@ -158,27 +213,40 @@ class MdEditorHelper extends AppHelper {
 
     /**
      * EasyMDEのコンフィグレーションおよびイベント初期化スクリプトの動的生成
-     * - Ajaxを用いた画像非同期アップロードハンドラーの実装
-     * - テキスト変更イベント（change）を監視したシームレスなフォームデータリアルタイム同期
+     * - Fetch APIを用いた画像非同期アップロードハンドラーの実装
+     * - CSRFトークンへの対応と二重初期化の防止
      *
      * @param  string $domId 対象テキストエリアのDOM要素ID
      * @return string
      */
     protected function _buildMdeScript($domId) {
-        $toolbarJs = $this->_buildToolbarJs();
+        $toolbarJs = $this->_buildToolbarJs(); 
         $uploadUrl = $this->BcBaser->getUrl('/admin/md_editor/md_editor_uploads/upload');
         
+        $jsonDomId = json_encode($domId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $jsonUploadUrl = json_encode($uploadUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        
         return "
-            jQuery(function($) {
+            document.addEventListener('DOMContentLoaded', function() {
                 if (typeof EasyMDE !== 'undefined') {
-                    var targetElement = document.getElementById('" . $domId . "');
+                    var targetElement = document.getElementById(" . $jsonDomId . ");
+                    
+                    // 要素の存在チェックと二重初期化防止
                     if (targetElement && !targetElement.classList.contains('easymde-initialized')) {
+                        
+                        // 管理画面用のCSRFトークンをフォーム内から取得
+                        var csrfToken = '';
+                        var csrfInput = document.querySelector('input[name=\"_csrfToken\"]') || document.querySelector('input[name=\"data[_Token][key]\"]');
+                        if (csrfInput) {
+                            csrfToken = csrfInput.value;
+                        }
+
                         var easyMDE = new EasyMDE({
                             element: targetElement,
                             autoDownloadFontAwesome: true,
                             spellChecker: false,
-                            forceSync: true,
-                            status: ['autosave', 'lines', 'words', 'cursor'],
+                            forceSync: true, // 元のテキストエリア（textarea）に値を同期
+                            status: ['autosave', 'lines', 'words', 'cursor', 'upload-image'],
                             minHeight: '350px',
                             maxHeight: '550px',
                             tabSize: 4,
@@ -186,33 +254,49 @@ class MdEditorHelper extends AppHelper {
                             imageUploadFunction: function(file, onSuccess, onError) {
                                 var formData = new FormData();
                                 formData.append('image', file);
-                                $.ajax({
-                                    url: '" . $uploadUrl . "',
-                                    type: 'POST',
-                                    data: formData,
-                                    processData: false,
-                                    contentType: false,
-                                    dataType: 'json',
-                                    success: function(res) {
-                                        if (res && res.data && res.data.filePath) {
-                                            onSuccess(res.data.filePath);
-                                        } else {
-                                            onError(res.message || 'Upload failed');
-                                        }
-                                    },
-                                    error: function() {
-                                        onError('Server error');
+                                
+                                var headers = {};
+                                if (csrfToken) {
+                                    headers['X-CSRF-Token'] = csrfToken;
+                                }
+
+                                fetch(" . $jsonUploadUrl . ", {
+                                    method: 'POST',
+                                    headers: headers,
+                                    body: formData
+                                })
+                                .then(function(response) {
+                                    if (!response.ok) {
+                                        throw new Error('Server error (' + response.status + ')');
                                     }
+                                    return response.json();
+                                })
+                                .then(function(res) {
+                                    var filePath = res && (res.filename || res.url || (res.data && res.data.filePath));
+                                    
+                                    if (filePath) {
+                                        onSuccess(filePath);
+                                    } else {
+                                        onError(res.message || 'Upload failed');
+                                    }
+                                })
+                                .catch(function(error) {
+                                    onError(error.message || 'Server error');
                                 });
                             },
                             toolbar: " . $toolbarJs . "
                         });
-                        targetElement.classList.add('easymde-initialized');
                         
-                        // エディタ（CodeMirror）のリアルタイム変更イベントをテキストエリア（value）に同期
-                        easyMDE.codemirror.on('change', function() { 
-                            targetElement.value = easyMDE.value(); 
-                        });
+                        // 初期化済みマークを付与
+                        targetElement.classList.add('easymde-initialized');
+
+                        // ガイドメッセージを非表示
+                        if (easyMDE.gui && easyMDE.gui.statusbar) {
+                            var uploadStatusEl = easyMDE.gui.statusbar.querySelector('.upload-image');
+                            if (uploadStatusEl) {
+                                uploadStatusEl.style.display = 'none';
+                            }
+                        }
                     }
                 }
             });
@@ -223,12 +307,24 @@ class MdEditorHelper extends AppHelper {
      * ツールバー設定（setting.php）のJavaScriptオブジェクト（JSON）変換
      * - 文字列項目と自作カスタムボタン用多次元配列オブジェクトの振り分け・動的組み立て
      * - カーソル位置（getCursor）へのテンプレートテキスト挿入アクションの定義
+     * - 【追加】固定ページ以外の編集画面（ブログ等）における html-raw ボタンの動的排除
      *
      * @return string
      */
     protected function _buildToolbarJs() {
         $configToolbar = Configure::read('MdEditor.toolbar');
         if (empty($configToolbar) || !is_array($configToolbar)) { return '["bold", "italic", "heading", "|", "quote", "image", "preview", "side-by-side", "fullscreen"]'; }
+        
+        // 【追加】現在のリクエストが「固定ページ（pages）」以外の場合、raw-code ボタンをツールバーから完全排除
+        if (isset($this->request->params['controller']) && $this->request->params['controller'] !== 'pages') {
+            foreach ($configToolbar as $key => $item) {
+                if (is_array($item) && isset($item['name']) && $item['name'] === 'raw-code') {
+                    unset($configToolbar[$key]);
+                    break;
+                }
+            }
+        }
+
         $jsItems = array();
         foreach ($configToolbar as $item) {
             if (is_string($item)) { $jsItems[] = '"' . $item . '"'; }
