@@ -13,6 +13,7 @@
  * @license    MIT License
  * @link       https://hattantoco.com
  */
+
 document.addEventListener('DOMContentLoaded', function() {
     
     // 対象となるコードブロック要素（codeタグ）を全取得

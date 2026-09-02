@@ -16,6 +16,7 @@
  * @license    MIT License
  * @link       https://hattantoco.com
  */
+
 class MdEditorControllerEventListener extends BcControllerEventListener {
 
     /**
@@ -120,17 +121,25 @@ class MdEditorControllerEventListener extends BcControllerEventListener {
 
             $currentUrl = $controller->request->here;
 
-            // 1行ずつの結合スタイルへ完全統一し、PHPのネストと出力時のインデントの美しさを完全両立
+            // JavaScriptの出力生成
             $interceptJs = "";
             $interceptJs .= "\n<script type=\"text/javascript\">\n";
-            $interceptJs .= "$(function() {\n";
-            $interceptJs .= "    // 1. MdEditorの無効ボタンを正確に狙い撃ち（他人に1ミリも干渉しない単一セレクタ）\n";
-            $interceptJs .= "    var \$deleteBtn = \$('a.btn-delete[href*=\"/plugins/ajax_delete/MdEditor\"], a.btn-delete[href*=\"/plugins/ajax_delete/MDEditor\"]');\n";
+            $interceptJs .= "document.addEventListener('DOMContentLoaded', function() {\n";
+            $interceptJs .= "    // MdEditorの削除ボタンの要素を取得\n";
+            $interceptJs .= "    var deleteBtn = document.querySelector('a.btn-delete[href*=\"/plugins/ajax_delete/MdEditor\"], a.btn-delete[href*=\"/plugins/ajax_delete/MDEditor\"]');\n";
             $interceptJs .= "\n";
-            $interceptJs .= "    if (\$deleteBtn.length > 0) {\n";
-            $interceptJs .= "        // 2. 自分のボタンのクリックイベントに対して、先行お掃除処理を登録\n";
-            $interceptJs .= "        \$deleteBtn.on('click', function(e) {\n";
+            $interceptJs .= "    if (deleteBtn) {\n";
+            $interceptJs .= "        // 後続のイベントハンドラより前に処理を実行するため、イベントキャプチャ（true）を使用\n";
+            $interceptJs .= "        deleteBtn.addEventListener('click', function(e) {\n";
             $interceptJs .= "            var currentElement = this;\n";
+            $interceptJs .= "            \n";
+            $interceptJs .= "            // 二重実行防止のフラグがあれば処理をスキップ\n";
+            $interceptJs .= "            if (currentElement.dataset.mdResetPassed) return;\n";
+            $interceptJs .= "            \n";
+            $interceptJs .= "            // コアや他プラグインによる既存のイベント発火を一時停止\n";
+            $interceptJs .= "            e.stopImmediatePropagation();\n";
+            $interceptJs .= "            e.preventDefault();\n";
+            $interceptJs .= "            \n";
             $interceptJs .= "            var isConfirm = confirm(\n";
             $interceptJs .= "                \"– MdEditorからの確認 –\\n\\n\" +\n";
             $interceptJs .= "                \"現在、基本設定＞エディタ設定で「Markdownエディタ」が選択されている可能性があります。\\n\\n\" +\n";
@@ -139,25 +148,23 @@ class MdEditorControllerEventListener extends BcControllerEventListener {
             $interceptJs .= "            );\n";
             $interceptJs .= "            \n";
             $interceptJs .= "            if (isConfirm) {\n";
-            $interceptJs .= "                // 同期（Ajax）でPHP側の低レイヤーSQLリセット処理を最優先実行\n";
-            $interceptJs .= "                \$.ajax({\n";
-            $interceptJs .= "                    url: '{$currentUrl}',\n";
-            $interceptJs .= "                    type: 'GET',\n";
-            $interceptJs .= "                    data: { 'action': 'mdeditor_force_reset' },\n";
-            $interceptJs .= "                    async: false,\n";
-            $interceptJs .= "                    dataType: 'json'\n";
+            $interceptJs .= "                // 非同期通信でエディタ設定のリセット処理を実行\n";
+            $interceptJs .= "                fetch('{$currentUrl}?action=mdeditor_force_reset', {\n";
+            $interceptJs .= "                    method: 'GET',\n";
+            $interceptJs .= "                    credentials: 'same-origin'\n";
+            $interceptJs .= "                })\n";
+            $interceptJs .= "                .then(function() {\n";
+            $interceptJs .= "                    // リセット完了後、フラグを付与して本来の削除イベントを再実行\n";
+            $interceptJs .= "                    currentElement.dataset.mdResetPassed = 'true';\n";
+            $interceptJs .= "                    currentElement.click();\n";
+            $interceptJs .= "                })\n";
+            $interceptJs .= "                .catch(function(error) {\n";
+            $interceptJs .= "                    console.error('[MdEditor] Reset Error:', error);\n";
+            $interceptJs .= "                    currentElement.dataset.mdResetPassed = 'true';\n";
+            $interceptJs .= "                    currentElement.click();\n";
             $interceptJs .= "                });\n";
-            $interceptJs .= "                // 正常完了したら、そのままバトンを後ろのイベント（コアのアラート）へ流します\n";
-            $interceptJs .= "            } else {\n";
-            $interceptJs .= "                // キャンセルされた場合は、後ろに控えているコアシステムへの通信をその場で遮断\n";
-            $interceptJs .= "                e.preventDefault(); e.stopImmediatePropagation();\n";
-            $interceptJs .= "                return false;\n";
             $interceptJs .= "            }\n";
-            $interceptJs .= "        });\n";
-            $interceptJs .= "        \n";
-            $interceptJs .= "        // 3. 最優先順序シャッフルの復元\n";
-            $interceptJs .= "        var _events = \$._data(\$deleteBtn.get(0), 'events');\n";
-            $interceptJs .= "        if (_events && _events.click) { _events.click.unshift(_events.click.pop()); }\n";
+            $interceptJs .= "        }, true);\n";
             $interceptJs .= "    }\n";
             $interceptJs .= "});\n";
             $interceptJs .= "</script>\n";
